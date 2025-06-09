@@ -1,0 +1,66 @@
+import cloudstream.plugins.*
+import cloudstream.common.*
+import cloudstream.framework.api.*
+import kotlinx.serialization.*
+import kotlinx.serialization.json.*
+
+class CB01Net : MainAPI() {
+    override var name = "CB01Net by Mirabilandia"
+    override var mainUrl = "https://cb01net.digital"
+
+    override val lang = "it"
+    override val hasMainPage = true
+
+    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
+        val document = app.get(mainUrl).document
+        val list = document.select("div.movies-list > div.movie-item").map {
+            val title = it.select("h2.title").text()
+            val url = it.select("a").attr("href")
+            val poster = it.select("img").attr("src")
+            MovieSearchResponse(title, url, this.name, poster)
+        }
+        return HomePageResponse(list)
+    }
+
+    override suspend fun search(query: String): List<SearchResponse> {
+        val url = "$mainUrl/search?q=$query"
+        val document = app.get(url).document
+        val list = document.select("div.movies-list > div.movie-item").map {
+            val title = it.select("h2.title").text()
+            val url = it.select("a").attr("href")
+            val poster = it.select("img").attr("src")
+            MovieSearchResponse(title, url, this.name, poster)
+        }
+        return list
+    }
+
+    override suspend fun load(url: String): LoadResponse {
+        val document = app.get(url).document
+        val title = document.selectFirst("h1.title")?.text() ?: "No title"
+        val poster = document.selectFirst("div.poster img")?.attr("src") ?: ""
+        val plot = document.selectFirst("div.plot")?.text() ?: ""
+        val episodes = mutableListOf<Episode>()
+
+        document.select("ul.episodes-list li a").forEachIndexed { index, element ->
+            val epUrl = element.attr("href")
+            val epTitle = element.text()
+            episodes.add(Episode(epTitle, epUrl, index + 1))
+        }
+
+        val videoList = mutableListOf<Video>()
+
+        document.select("div.video-players iframe").forEach {
+            val videoUrl = it.attr("src")
+            videoList.add(Video(videoUrl, "embed", null))
+        }
+
+        return LoadResponse(
+            title = title,
+            url = url,
+            posterUrl = poster,
+            plot = plot,
+            episodes = episodes,
+            videos = videoList
+        )
+    }
+}
